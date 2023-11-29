@@ -13,8 +13,8 @@ app.use(cors({
 }))
 app.use(express.json())
 
-const varifyToekn = (req, res, next) => {
-    const token = req.cookies.token
+const varifyToken = (req, res, next) => {
+    const token = req.query.token
     if (!token) {
         return res.status(401).send({ message: "unAuthorized access" })
     }
@@ -35,7 +35,7 @@ const varifyToekn = (req, res, next) => {
 
 
 
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASS}@cluster0.xbiw867.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -59,16 +59,62 @@ async function run() {
         // set Token api
         app.post("/api/user/token", async (req, res) => {
             const email = req.body
-
             const token = jwt.sign(email, process.env.ACCESS_TOKEN, { expiresIn: "365d" })
 
-            res.cookie("token", token, {
-                httpOnly: true,
-                secure: process.env.NODE_ENV === 'production',
-                sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-            }).send({ message: "success" })
+            res.send({ token })
 
         })
+
+
+        // user post api
+        app.post("/api/uploadMyPost", varifyToken, async (req, res) => {
+            const postdata = req.body
+
+            const result = await postCollection.insertOne(postdata)
+            res.send(result)
+        })
+
+
+        // get all post
+        app.get("/api/all/post", varifyToken, async (req, res) => {
+            const result = await postCollection.find().toArray()
+            res.send(result)
+        })
+
+
+        // post liked api 
+        app.put("/api/post/liked", varifyToken, async (req, res) => {
+            const postId = req.query.postId
+            const likerEmail = req.query.liker
+
+            const find = { _id: new ObjectId(postId) }
+
+            const update = {
+                $push: {
+                    likedBy: likerEmail
+                }
+            }
+
+            const result = await postCollection.updateOne(find, update)
+            res.send(result)
+        })
+
+
+        // like undo api
+        app.put("/api/post/unLike", varifyToken, async (req, res) => {
+            const postId = req.query.postId
+            const likerEmail = req.query.liker
+            const find = { _id: new ObjectId(postId) }
+            const update = {
+                $pull: {
+                    likedBy: likerEmail
+                }
+            }
+
+            const result = await postCollection.updateOne(find, update)
+            res.send(result)
+        })
+
 
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
